@@ -1,0 +1,37 @@
+name: Verify Android package
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Prepare Android SDK
+        shell: pwsh
+        run: |
+          & "$env:ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager.bat" "platforms;android-35" "build-tools;35.0.0"
+          if ($LASTEXITCODE -ne 0) { throw "SDK installation failed" }
+      - name: Compile debug APK
+        shell: pwsh
+        run: ./build.ps1
+      - name: Verify APK application ID
+        shell: pwsh
+        run: |
+          $badging = & "$env:ANDROID_HOME/build-tools/35.0.0/aapt.exe" dump badging build/PocketGuard.apk
+          if ($LASTEXITCODE -ne 0) { throw "APK inspection failed" }
+          $line = $badging | Where-Object { $_ -match "^package: name=" }
+          if ($line -notmatch "^package: name='wang\.lucian\.pocketguard'") { throw "Unexpected application ID: $line" }
+          Write-Output $line
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-debug-apk
+          path: build/PocketGuard.apk
